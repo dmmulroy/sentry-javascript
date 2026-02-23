@@ -9,7 +9,7 @@ import {
 import { SentrySpanProcessor } from '@sentry/opentelemetry';
 import { createRequire } from 'module';
 import { DEBUG_BUILD } from '../../../debug-build';
-import type { ElysiaErrorContext, ElysiaErrorHandler, ElysiaInstance, ElysiaRequestHandler } from './types';
+import type { ElysiaErrorContext, ElysiaInstance } from './types';
 
 const INTEGRATION_NAME = 'Elysia';
 
@@ -17,7 +17,7 @@ const _elysiaIntegration = (() => {
   return {
     name: INTEGRATION_NAME,
     setupOnce() {
-      // No-op: tracing is applied per-instance via setupElysiaErrorHandler
+      // No-op: tracing is applied per-instance via withElysia
     },
   };
 }) satisfies IntegrationFn;
@@ -26,7 +26,7 @@ const _elysiaIntegration = (() => {
  * Adds Sentry instrumentation for [Elysia](https://elysiajs.com/).
  *
  * Tracing is powered by Elysia's first-party `@elysiajs/opentelemetry` plugin,
- * which is automatically applied when you call `setupElysiaErrorHandler(app)`.
+ * which is automatically applied when you call `withElysia(app)`.
  *
  * @example
  * ```javascript
@@ -77,41 +77,37 @@ function loadElysiaOtelPlugin(): ((options?: Record<string, unknown>) => unknown
 }
 
 /**
- * Add Sentry error handling, request context, and tracing to an Elysia app.
+ * Integrate Sentry with an Elysia app for error handling, request context,
+ * and tracing. Returns the app instance for chaining.
  *
  * This function:
  * 1. Applies `@elysiajs/opentelemetry` for tracing (if installed)
  * 2. Registers `onRequest` for request context
  * 3. Registers `onError` for error capturing (with `{ as: 'global' }`)
  *
- * Must be called **before** defining routes so that `onRequest`
- * applies to all subsequent handlers. The `onError` hook uses
- * `{ as: 'global' }` and applies regardless of registration order.
+ * Should be called at the **start** of the chain before defining routes.
  *
  * @param app The Elysia instance
- * @param options Configuration options for the handler
+ * @param options Configuration options
+ * @returns The same Elysia instance for chaining
  *
  * @example
  * ```javascript
- * const Sentry = require('@sentry/node');
+ * const Sentry = require('@sentry/bun');
  * const { Elysia } = require('elysia');
  *
- * const app = new Elysia();
- *
- * Sentry.setupElysiaErrorHandler(app);
- *
- * // Define routes after Sentry setup
- * app.get('/', () => 'Hello World');
- * app.listen(3000);
+ * Sentry.withElysia(new Elysia())
+ *   .get('/', () => 'Hello World')
+ *   .listen(3000);
  * ```
  */
-export function setupElysiaErrorHandler(app: ElysiaInstance, options?: Partial<ElysiaHandlerOptions>): void {
+export function withElysia<T extends ElysiaInstance>(app: T, options?: Partial<ElysiaHandlerOptions>): T {
   const otelPlugin = loadElysiaOtelPlugin();
   if (otelPlugin) {
     app.use(otelPlugin({ spanProcessors: [new SentrySpanProcessor()] }));
   }
 
-  app.onRequest(((context: { request: Request }) => {
+  app.onRequest((context: { request: Request }) => {
     const isolationScope = getIsolationScope();
     if (isolationScope !== getDefaultIsolationScope()) {
       isolationScope.setSDKProcessingMetadata({
@@ -122,9 +118,9 @@ export function setupElysiaErrorHandler(app: ElysiaInstance, options?: Partial<E
         },
       });
     }
-  }) as ElysiaRequestHandler);
+  });
 
-  app.onError({ as: 'global' }, ((context: ElysiaErrorContext) => {
+  app.onError({ as: 'global' }, (context: ElysiaErrorContext) => {
     const shouldHandleError = options?.shouldHandleError || defaultShouldHandleError;
     if (shouldHandleError(context)) {
       captureException(context.error, {
@@ -134,5 +130,7 @@ export function setupElysiaErrorHandler(app: ElysiaInstance, options?: Partial<E
         },
       });
     }
-  }) as ElysiaErrorHandler);
+  });
+
+  return app;
 }

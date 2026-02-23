@@ -124,7 +124,7 @@ export {
   connectIntegration,
   setupConnectErrorHandler,
   elysiaIntegration,
-  setupElysiaErrorHandler,
+  withElysia,
   genericPoolIntegration,
   graphqlIntegration,
   knexIntegration,
