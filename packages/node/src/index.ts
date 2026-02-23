@@ -16,6 +16,7 @@ export { postgresJsIntegration } from './integrations/tracing/postgresjs';
 export { prismaIntegration } from './integrations/tracing/prisma';
 export { hapiIntegration, setupHapiErrorHandler } from './integrations/tracing/hapi';
 export { honoIntegration, setupHonoErrorHandler } from './integrations/tracing/hono';
+export { elysiaIntegration, setupElysiaErrorHandler } from './integrations/tracing/elysia';
 export { koaIntegration, setupKoaErrorHandler } from './integrations/tracing/koa';
 export { connectIntegration, setupConnectErrorHandler } from './integrations/tracing/connect';
 export { knexIntegration } from './integrations/tracing/knex';

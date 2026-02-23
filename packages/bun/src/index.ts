@@ -123,6 +123,8 @@ export {
   setupKoaErrorHandler,
   connectIntegration,
   setupConnectErrorHandler,
+  elysiaIntegration,
+  setupElysiaErrorHandler,
   genericPoolIntegration,
   graphqlIntegration,
   knexIntegration,
