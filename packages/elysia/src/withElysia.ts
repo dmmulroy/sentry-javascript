@@ -1,11 +1,31 @@
 import { opentelemetry } from '@elysiajs/opentelemetry';
-import { captureException, getDefaultIsolationScope, getIsolationScope } from '@sentry/core';
+import {
+  captureException,
+  getClient,
+  getIsolationScope,
+  SEMANTIC_ATTRIBUTE_SENTRY_OP,
+  SEMANTIC_ATTRIBUTE_SENTRY_ORIGIN,
+  spanToJSON,
+} from '@sentry/core';
 import type { Elysia, ErrorContext } from 'elysia';
-import { ElysiaSentrySpanProcessor } from './spanProcessor';
 
 interface ElysiaHandlerOptions {
   shouldHandleError: (context: ErrorContext) => boolean;
 }
+
+const ELYSIA_ORIGIN = 'auto.http.otel.elysia';
+
+const ELYSIA_LIFECYCLE_OP_MAP: Record<string, string> = {
+  Request: 'middleware.elysia',
+  Parse: 'middleware.elysia',
+  Transform: 'middleware.elysia',
+  BeforeHandle: 'middleware.elysia',
+  Handle: 'request_handler.elysia',
+  AfterHandle: 'middleware.elysia',
+  MapResponse: 'middleware.elysia',
+  AfterResponse: 'middleware.elysia',
+  Error: 'middleware.elysia',
+};
 
 function defaultShouldHandleError(context: ErrorContext): boolean {
   const status = context.set.status;
@@ -37,25 +57,36 @@ function defaultShouldHandleError(context: ErrorContext): boolean {
  * ```
  */
 export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHandlerOptions>): T {
-  app.use(opentelemetry({ spanProcessors: [new ElysiaSentrySpanProcessor()] }));
+  app.use(opentelemetry());
 
-  app.onRequest((context: { request: Request }) => {
-    const isolationScope = getIsolationScope();
-    if (isolationScope !== getDefaultIsolationScope()) {
-      isolationScope.setSDKProcessingMetadata({
-        normalizedRequest: {
-          method: context.request.method,
-          url: context.request.url,
-          headers: Object.fromEntries(context.request.headers.entries()),
-        },
-      });
+  const client = getClient();
+  client?.on('spanEnd', span => {
+    const spanData = spanToJSON(span);
+
+    // Enrich Elysia lifecycle spans with semantic op and origin.
+    // We mutate the attributes directly because the span has already ended
+    // and `setAttribute()` is a no-op on ended OTel spans.
+    const op = ELYSIA_LIFECYCLE_OP_MAP[spanData.description || ''];
+    if (op && spanData.data) {
+      const attrs = spanData.data;
+      attrs[SEMANTIC_ATTRIBUTE_SENTRY_OP] = op;
+      attrs[SEMANTIC_ATTRIBUTE_SENTRY_ORIGIN] = ELYSIA_ORIGIN;
     }
   });
 
+  app.onRequest(context => {
+    getIsolationScope().setSDKProcessingMetadata({
+      normalizedRequest: {
+        method: context.request.method,
+        url: context.request.url,
+        headers: Object.fromEntries(context.request.headers.entries()),
+      },
+    });
+  });
+
   app.onError({ as: 'global' }, context => {
-    const isolationScope = getIsolationScope();
-    if (isolationScope !== getDefaultIsolationScope() && context.route) {
-      isolationScope.setTransactionName(`${context.request.method} ${context.route}`);
+    if (context.route) {
+      getIsolationScope().setTransactionName(`${context.request.method} ${context.route}`);
     }
 
     const shouldHandleError = options?.shouldHandleError || defaultShouldHandleError;

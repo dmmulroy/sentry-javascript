@@ -1,6 +1,10 @@
 import * as os from 'node:os';
 import type { NodeClient } from '@sentry/bun';
-import { getDefaultIntegrations as getBunDefaultIntegrations, makeFetchTransport } from '@sentry/bun';
+import {
+  bunServerIntegration,
+  getDefaultIntegrations as getBunDefaultIntegrations,
+  makeFetchTransport,
+} from '@sentry/bun';
 import type { Integration, Options } from '@sentry/core';
 import { applySdkMetadata } from '@sentry/core';
 import { init as initNode } from '@sentry/node';
@@ -8,7 +12,9 @@ import type { ElysiaOptions } from './types';
 
 /** Get the default integrations for the Elysia SDK. */
 export function getDefaultIntegrations(_options: Options): Integration[] {
-  return getBunDefaultIntegrations(_options);
+  // Filter out bunServerIntegration
+  // Elysia already produces an HTTP server span, so we don't need Bun's competing root span.
+  return getBunDefaultIntegrations(_options).filter(i => i.name !== bunServerIntegration().name);
 }
 
 /**

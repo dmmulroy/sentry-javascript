@@ -20,11 +20,12 @@ test('Captures an error thrown in a route handler', async ({ baseURL, request })
 
   expect(errorEvent.transaction).toEqual('GET /test-exception/:id');
 
-  expect(errorEvent.contexts?.trace).toEqual({
-    parent_span_id: expect.stringMatching(/[a-f0-9]{16}/),
-    trace_id: expect.stringMatching(/[a-f0-9]{32}/),
-    span_id: expect.stringMatching(/[a-f0-9]{16}/),
-  });
+  expect(errorEvent.contexts?.trace).toEqual(
+    expect.objectContaining({
+      trace_id: expect.stringMatching(/[a-f0-9]{32}/),
+      span_id: expect.stringMatching(/[a-f0-9]{16}/),
+    }),
+  );
 });
 
 test('Does not capture errors for 4xx responses', async ({ baseURL, request }) => {
@@ -33,10 +34,10 @@ test('Does not capture errors for 4xx responses', async ({ baseURL, request }) =
   });
 
   const response = await request.get(`${baseURL}/test-4xx`);
-  expect(response.status()).toBe(400);
-
   // Wait for the transaction to ensure the request was processed
   await transactionPromise;
+
+  expect(response.status()).toBe(400);
 });
 
 test('Captures POST route errors', async ({ baseURL, request }) => {

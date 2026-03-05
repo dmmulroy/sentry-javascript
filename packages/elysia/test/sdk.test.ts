@@ -22,6 +22,7 @@ vi.mock('@sentry/node', () => ({
 vi.mock('@sentry/bun', () => ({
   getDefaultIntegrations: mockGetBunDefaultIntegrations,
   makeFetchTransport: mockMakeFetchTransport,
+  bunServerIntegration: () => ({ name: 'BunServer', setupOnce: vi.fn() }),
 }));
 
 // Must import after mocks are set up
@@ -74,9 +75,10 @@ describe('init', () => {
     );
   });
 
-  it('sets default integrations from bun', () => {
+  it('sets default integrations from bun and filters out BunServer', () => {
     const mockIntegration = { name: 'MockIntegration', setupOnce: vi.fn() };
-    mockGetBunDefaultIntegrations.mockReturnValueOnce([mockIntegration]);
+    const bunServerMock = { name: 'BunServer', setupOnce: vi.fn() };
+    mockGetBunDefaultIntegrations.mockReturnValueOnce([mockIntegration, bunServerMock]);
 
     init({ dsn: 'https://examplePublicKey@o0.ingest.sentry.io/0' });
 
@@ -111,9 +113,10 @@ describe('init', () => {
 });
 
 describe('getDefaultIntegrations', () => {
-  it('returns bun default integrations', () => {
+  it('returns bun default integrations without BunServer', () => {
     const mockIntegration = { name: 'MockIntegration', setupOnce: vi.fn() };
-    mockGetBunDefaultIntegrations.mockReturnValueOnce([mockIntegration]);
+    const bunServerMock = { name: 'BunServer', setupOnce: vi.fn() };
+    mockGetBunDefaultIntegrations.mockReturnValueOnce([mockIntegration, bunServerMock]);
 
     const integrations = getDefaultIntegrations({});
 
