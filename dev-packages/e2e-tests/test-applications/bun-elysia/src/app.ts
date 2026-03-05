@@ -93,6 +93,27 @@ app.get('/test-outgoing-fetch-external-disallowed', async () => {
   return data;
 });
 
+// Route that throws a string (not an Error object)
+app.get('/test-string-error', () => {
+  // eslint-disable-next-line no-throw-literal
+  throw 'String error message';
+});
+
+// Route for concurrent isolation tests — returns scope data in response
+app.get('/test-isolation/:userId', async ({ params }) => {
+  Sentry.setUser({ id: params.userId });
+  Sentry.setTag('user_id', params.userId);
+
+  // Simulate async work to increase overlap between concurrent requests
+  await new Promise(resolve => setTimeout(resolve, 200));
+
+  return {
+    userId: params.userId,
+    isolationScopeUserId: Sentry.getIsolationScope().getUser()?.id,
+    isolationScopeTag: Sentry.getIsolationScope().getScopeData().tags?.user_id,
+  };
+});
+
 // Flush route for waiting on events
 app.get('/flush', async () => {
   await Sentry.flush();

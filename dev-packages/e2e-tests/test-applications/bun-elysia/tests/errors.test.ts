@@ -89,3 +89,21 @@ test('Captures POST route errors', async ({ baseURL, request }) => {
     handled: false,
   });
 });
+
+test('Captures thrown string errors', async ({ baseURL, request }) => {
+  const errorEventPromise = waitForError('bun-elysia', event => {
+    return !event.type && event.exception?.values?.[0]?.value === 'String error message';
+  });
+
+  await request.get(`${baseURL}/test-string-error`);
+
+  const errorEvent = await errorEventPromise;
+
+  expect(errorEvent.exception?.values?.[0]?.value).toBe('String error message');
+  expect(errorEvent.exception?.values?.[0]?.mechanism).toEqual(
+    expect.objectContaining({
+      type: 'elysia',
+      handled: false,
+    }),
+  );
+});
