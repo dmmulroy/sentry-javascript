@@ -1,26 +1,4 @@
-export type {
-  Breadcrumb,
-  BreadcrumbHint,
-  PolymorphicRequest,
-  RequestEventData,
-  SdkInfo,
-  Event,
-  EventHint,
-  ErrorEvent,
-  Exception,
-  Session,
-  SeverityLevel,
-  Span,
-  StackFrame,
-  Stacktrace,
-  Thread,
-  User,
-  FeatureFlagsIntegration,
-  Metric,
-  ExclusiveEventHintOrCaptureContext,
-  CaptureContext,
-} from '@sentry/core';
-
+// Re-export everything from @sentry/bun
 export {
   addEventProcessor,
   addBreadcrumb,
@@ -177,7 +155,32 @@ export {
   statsigIntegration,
   unleashIntegration,
   metrics,
-} from '@sentry/node';
+  bunServerIntegration,
+  makeFetchTransport,
+} from '@sentry/bun';
+
+export type {
+  Breadcrumb,
+  BreadcrumbHint,
+  PolymorphicRequest,
+  RequestEventData,
+  SdkInfo,
+  Event,
+  EventHint,
+  ErrorEvent,
+  Exception,
+  Session,
+  SeverityLevel,
+  Span,
+  StackFrame,
+  Stacktrace,
+  Thread,
+  User,
+  FeatureFlagsIntegration,
+  Metric,
+  ExclusiveEventHintOrCaptureContext,
+  CaptureContext,
+} from '@sentry/core';
 
 export {
   captureConsoleIntegration,
@@ -186,10 +189,8 @@ export {
   rewriteFramesIntegration,
 } from '@sentry/core';
 
-export type { BunOptions } from './types';
+export type { ElysiaOptions } from './types';
 
-// eslint-disable-next-line deprecation/deprecation
-export { BunClient } from './client';
+// Elysia-specific exports
+export { withElysia } from './withElysia';
 export { getDefaultIntegrations, init } from './sdk';
-export { bunServerIntegration } from './integrations/bunserver';
-export { makeFetchTransport } from './transports';
