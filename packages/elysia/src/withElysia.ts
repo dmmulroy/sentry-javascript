@@ -53,6 +53,11 @@ export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHan
   });
 
   app.onError({ as: 'global' }, context => {
+    const isolationScope = getIsolationScope();
+    if (isolationScope !== getDefaultIsolationScope() && context.route) {
+      isolationScope.setTransactionName(`${context.request.method} ${context.route}`);
+    }
+
     const shouldHandleError = options?.shouldHandleError || defaultShouldHandleError;
     if (shouldHandleError(context)) {
       captureException(context.error, {
