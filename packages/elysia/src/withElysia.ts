@@ -60,10 +60,12 @@ function defaultShouldHandleError(context: ErrorContext): boolean {
  * ```
  */
 export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHandlerOptions>): T {
+  // Register the opentelemetry plugin
+  // https://elysiajs.com/plugins/opentelemetry
   app.use(opentelemetry());
 
-  const client = getClient();
-  client?.on('spanEnd', span => {
+  // Enrich Elysia lifecycle spans with semantic op and origin.
+  getClient()?.on('spanEnd', span => {
     const spanData = spanToJSON(span);
 
     // Enrich Elysia lifecycle spans with semantic op and origin.
@@ -77,6 +79,7 @@ export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHan
     }
   });
 
+  // Set SDK processing metadata for all requests
   app.onRequest(context => {
     getIsolationScope().setSDKProcessingMetadata({
       normalizedRequest: {
@@ -87,6 +90,7 @@ export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHan
     });
   });
 
+  // Propagate trace data to all response headers
   app.onAfterHandle({ as: 'global' }, context => {
     const traceData = getTraceData();
     if (traceData['sentry-trace']) {
@@ -97,6 +101,7 @@ export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHan
     }
   });
 
+  // Register the error handler for all routes
   app.onError({ as: 'global' }, context => {
     if (context.route) {
       getIsolationScope().setTransactionName(`${context.request.method} ${context.route}`);
