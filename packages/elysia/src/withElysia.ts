@@ -17,6 +17,9 @@ interface ElysiaHandlerOptions {
 
 const ELYSIA_ORIGIN = 'auto.http.otel.elysia';
 
+let isClientHooksSetup = false;
+const emptySpanIds = new Set<string>();
+
 const ELYSIA_LIFECYCLE_OP_MAP: Record<string, string> = {
   Request: 'middleware.elysia',
   Parse: 'middleware.elysia',
@@ -65,42 +68,46 @@ export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHan
   // https://elysiajs.com/plugins/opentelemetry
   app.use(opentelemetry());
 
-  const client = getClient();
-  const emptySpanIds = new Set<string>();
+  if (!isClientHooksSetup) {
+    const client = getClient();
+    if (client) {
+      isClientHooksSetup = true;
 
-  // Enrich Elysia lifecycle spans with semantic op and origin,
-  // and mark empty spans that Elysia produces as children of lifecycle spans.
-  client?.on('spanEnd', span => {
-    const spanData = spanToJSON(span);
+      // Enrich Elysia lifecycle spans with semantic op and origin,
+      // and mark empty spans that Elysia produces as children of lifecycle spans.
+      client.on('spanEnd', span => {
+        const spanData = spanToJSON(span);
 
-    // Elysia produces empty spans for each function handler
-    // users usually use arrow functions for handlers so they will show up as <unknown>
-    // here we drop them so they don't clutter the transaction, if they get named by the user
-    // they will still show up as the name of the function
-    if (!spanData.description && (!spanData.data || Object.keys(spanData.data).length === 0)) {
-      emptySpanIds.add(spanData.span_id);
-      return;
+        // Elysia produces empty spans for each function handler
+        // users usually use arrow functions for handlers so they will show up as <unknown>
+        // here we drop them so they don't clutter the transaction, if they get named by the user
+        // they will still show up as the name of the function
+        if (!spanData.description && (!spanData.data || Object.keys(spanData.data).length === 0)) {
+          emptySpanIds.add(spanData.span_id);
+          return;
+        }
+
+        // Enrich Elysia lifecycle spans with semantic op and origin.
+        // We mutate the attributes directly because the span has already ended
+        // and `setAttribute()` is a no-op on ended OTel spans.
+        const op = ELYSIA_LIFECYCLE_OP_MAP[spanData.description || ''];
+        if (op && spanData.data) {
+          const attrs = spanData.data;
+          attrs[SEMANTIC_ATTRIBUTE_SENTRY_OP] = op;
+          attrs[SEMANTIC_ATTRIBUTE_SENTRY_ORIGIN] = ELYSIA_ORIGIN;
+        }
+      });
+
+      // Filter out the empty spans we marked above before sending the transaction,
+      // then clear the set to avoid unbounded memory growth.
+      client.on('beforeSendEvent', event => {
+        if (event.type === 'transaction' && event.spans) {
+          event.spans = event.spans.filter(span => !emptySpanIds.has(span.span_id));
+          emptySpanIds.clear();
+        }
+      });
     }
-
-    // Enrich Elysia lifecycle spans with semantic op and origin.
-    // We mutate the attributes directly because the span has already ended
-    // and `setAttribute()` is a no-op on ended OTel spans.
-    const op = ELYSIA_LIFECYCLE_OP_MAP[spanData.description || ''];
-    if (op && spanData.data) {
-      const attrs = spanData.data;
-      attrs[SEMANTIC_ATTRIBUTE_SENTRY_OP] = op;
-      attrs[SEMANTIC_ATTRIBUTE_SENTRY_ORIGIN] = ELYSIA_ORIGIN;
-    }
-  });
-
-  // Filter out the empty spans we marked above before sending the transaction,
-  // then clear the set to avoid unbounded memory growth.
-  client?.on('beforeSendEvent', event => {
-    if (event.type === 'transaction' && event.spans) {
-      event.spans = event.spans.filter(span => !emptySpanIds.has(span.span_id));
-      emptySpanIds.clear();
-    }
-  });
+  }
 
   // Set SDK processing metadata for all requests
   app.onRequest(context => {
