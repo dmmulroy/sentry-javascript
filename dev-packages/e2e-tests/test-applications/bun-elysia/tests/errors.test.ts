@@ -58,6 +58,22 @@ test('Does not capture errors for 4xx responses', async ({ baseURL, request }) =
   expect(response.status()).toBe(400);
 });
 
+test('Captures errors even when status is <= 299 in error handler', async ({ baseURL, request }) => {
+  const errorEventPromise = waitForError('bun-elysia', event => {
+    return !event.type && event.exception?.values?.[0]?.value === 'Error with 200 status';
+  });
+
+  await request.get(`${baseURL}/test-error-with-200-status`);
+
+  const errorEvent = await errorEventPromise;
+
+  expect(errorEvent.exception?.values?.[0]?.value).toBe('Error with 200 status');
+  expect(errorEvent.exception?.values?.[0]?.mechanism).toEqual({
+    type: 'elysia',
+    handled: false,
+  });
+});
+
 test('Captures POST route errors', async ({ baseURL, request }) => {
   const errorEventPromise = waitForError('bun-elysia', event => {
     return !event.type && event.exception?.values?.[0]?.value === 'Post error';

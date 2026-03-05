@@ -56,6 +56,12 @@ app.get('/test-4xx', ({ set }) => {
   return { error: 'Bad Request' };
 });
 
+// Error that reaches the error handler with status still set to 200 (unusual, should still be captured)
+app.get('/test-error-with-200-status', ({ set }) => {
+  set.status = 200;
+  throw new Error('Error with 200 status');
+});
+
 // POST route that echoes body
 app.post('/test-post', ({ body }) => ({ status: 'ok', body }));
 

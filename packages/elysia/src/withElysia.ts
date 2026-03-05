@@ -33,7 +33,9 @@ function defaultShouldHandleError(context: ErrorContext): boolean {
     return true;
   }
   const statusCode = typeof status === 'string' ? parseInt(status, 10) : status;
-  return statusCode >= 500;
+  // Capture server errors (5xx) and unusual status codes (<= 299 in an error handler).
+  // 3xx and 4xx are not captured by default (client errors / redirects).
+  return statusCode >= 500 || statusCode <= 299;
 }
 
 /**
