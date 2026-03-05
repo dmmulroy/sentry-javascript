@@ -73,9 +73,10 @@ export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHan
   client?.on('spanEnd', span => {
     const spanData = spanToJSON(span);
 
-    // Elysia produces empty spans (no name, no attributes) as children of lifecycle spans.
-    // Mark them here while they're still in their original empty state, before the
-    // OTel exporter decorates them with defaults like "<unknown>" and "manual" origin.
+    // Elysia produces empty spans for each function handler
+    // users usually use arrow functions for handlers so they will show up as <unknown>
+    // here we drop them so they don't clutter the transaction, if they get named by the user
+    // they will still show up as the name of the function
     if (!spanData.description && (!spanData.data || Object.keys(spanData.data).length === 0)) {
       emptySpanIds.add(spanData.span_id);
       return;
