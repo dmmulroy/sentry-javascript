@@ -7,6 +7,7 @@ import {
   SEMANTIC_ATTRIBUTE_SENTRY_OP,
   SEMANTIC_ATTRIBUTE_SENTRY_ORIGIN,
   spanToJSON,
+  winterCGHeadersToDict,
 } from '@sentry/core';
 import type { Elysia, ErrorContext } from 'elysia';
 
@@ -85,7 +86,7 @@ export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHan
       normalizedRequest: {
         method: context.request.method,
         url: context.request.url,
-        headers: Object.fromEntries(context.request.headers.entries()),
+        headers: winterCGHeadersToDict(context.request.headers),
       },
     });
   });
