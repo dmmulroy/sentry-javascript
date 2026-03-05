@@ -1,13 +1,13 @@
 import { opentelemetry } from '@elysiajs/opentelemetry';
 import { captureException, getDefaultIsolationScope, getIsolationScope } from '@sentry/core';
-import type { Elysia } from 'elysia';
+import type { Elysia, ErrorContext } from 'elysia';
 import { ElysiaSentrySpanProcessor } from './spanProcessor';
 
 interface ElysiaHandlerOptions {
-  shouldHandleError: (context: { set: { status?: number | string } }) => boolean;
+  shouldHandleError: (context: ErrorContext) => boolean;
 }
 
-function defaultShouldHandleError(context: { set: { status?: number | string } }): boolean {
+function defaultShouldHandleError(context: ErrorContext): boolean {
   const status = context.set.status;
   if (status === undefined) {
     return true;
@@ -19,11 +19,6 @@ function defaultShouldHandleError(context: { set: { status?: number | string } }
 /**
  * Integrate Sentry with an Elysia app for error handling, request context,
  * and tracing. Returns the app instance for chaining.
- *
- * This function:
- * 1. Applies `@elysiajs/opentelemetry` for tracing
- * 2. Registers `onRequest` for request context
- * 3. Registers `onError` for error capturing (with `{ as: 'global' }`)
  *
  * Should be called at the **start** of the chain before defining routes.
  *

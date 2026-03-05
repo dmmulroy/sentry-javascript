@@ -12,6 +12,17 @@ export function getDefaultIntegrations(_options: Options): Integration[] {
 }
 
 /**
+ * Get the runtime name and version.
+ */
+function getRuntime(): { name: string; version: string } {
+  if (typeof Bun !== 'undefined') {
+    return { name: 'bun', version: Bun.version };
+  }
+
+  return { name: 'node', version: process.version };
+}
+
+/**
  * Initializes the Sentry Elysia SDK.
  *
  * @example
@@ -30,7 +41,7 @@ export function init(userOptions: ElysiaOptions = {}): NodeClient | undefined {
   const options = {
     ...userOptions,
     platform: 'javascript',
-    runtime: { name: 'bun', version: Bun.version },
+    runtime: getRuntime(),
     serverName: userOptions.serverName || global.process.env.SENTRY_NAME || os.hostname(),
   };
 
