@@ -2,6 +2,17 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { waitForTransaction } from '@sentry-internal/test-utils';
 
+test('Includes sentry-trace and baggage in response headers', async ({ baseURL }) => {
+  const response = await fetch(`${baseURL}/test-success`);
+
+  const sentryTrace = response.headers.get('sentry-trace');
+  const baggage = response.headers.get('baggage');
+
+  expect(sentryTrace).toMatch(/[a-f0-9]{32}-[a-f0-9]{16}-[01]/);
+  expect(baggage).toContain('sentry-environment=qa');
+  expect(baggage).toContain('sentry-trace_id=');
+});
+
 // Bun's native fetch does not emit undici diagnostics channels,
 // so the nativeNodeFetchIntegration cannot inject sentry-trace/baggage headers.
 // These tests document the desired behavior and will pass once Bun adds support

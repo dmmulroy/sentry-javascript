@@ -2,22 +2,20 @@ import type { ErrorContext } from 'elysia';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Capture the handlers registered by withElysia
-let onRequestHandler: (context: unknown) => void;
+let onAfterHandleHandler: (context: unknown) => void;
 let onErrorHandler: (context: unknown) => void;
-let onAfterResponseHandler: (context: unknown) => void;
 
 const mockApp = {
   use: vi.fn().mockReturnThis(),
-  onRequest: vi.fn((handler: (context: unknown) => void) => {
-    onRequestHandler = handler;
+  onRequest: vi.fn(() => {
+    return mockApp;
+  }),
+  onAfterHandle: vi.fn((_opts: unknown, handler: (context: unknown) => void) => {
+    onAfterHandleHandler = handler;
     return mockApp;
   }),
   onError: vi.fn((_opts: unknown, handler: (context: unknown) => void) => {
     onErrorHandler = handler;
-    return mockApp;
-  }),
-  onAfterResponse: vi.fn((_opts: unknown, handler: (context: unknown) => void) => {
-    onAfterResponseHandler = handler;
     return mockApp;
   }),
 };
@@ -30,18 +28,24 @@ const mockGetIsolationScope = vi.fn(() => ({
 const mockGetClient = vi.fn(() => ({
   on: vi.fn(),
 }));
+const mockGetTraceData = vi.fn(() => ({
+  'sentry-trace': 'abc123-def456-1',
+  baggage: 'sentry-environment=test,sentry-trace_id=abc123',
+}));
 
 vi.mock('@elysiajs/opentelemetry', () => ({
   opentelemetry: vi.fn(() => 'otel-plugin'),
 }));
 
 vi.mock('@sentry/core', async importActual => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
   const actual = await importActual<typeof import('@sentry/core')>();
   return {
     ...actual,
     captureException: (...args: unknown[]) => mockCaptureException(...args),
     getIsolationScope: () => mockGetIsolationScope(),
     getClient: () => mockGetClient(),
+    getTraceData: () => mockGetTraceData(),
   };
 });
 
@@ -59,10 +63,11 @@ describe('withElysia', () => {
     expect(mockApp.use).toHaveBeenCalledWith('otel-plugin');
   });
 
-  it('registers onRequest, onError, and onAfterResponse hooks', () => {
+  it('registers onRequest, onAfterHandle, and onError hooks', () => {
     // @ts-expect-error - mock app
     withElysia(mockApp);
     expect(mockApp.onRequest).toHaveBeenCalled();
+    expect(mockApp.onAfterHandle).toHaveBeenCalledWith({ as: 'global' }, expect.any(Function));
     expect(mockApp.onError).toHaveBeenCalledWith({ as: 'global' }, expect.any(Function));
   });
 
@@ -70,6 +75,29 @@ describe('withElysia', () => {
     // @ts-expect-error - mock app
     const result = withElysia(mockApp);
     expect(result).toBe(mockApp);
+  });
+
+  describe('response trace headers', () => {
+    it('injects sentry-trace and baggage into response headers', () => {
+      // @ts-expect-error - mock app
+      withElysia(mockApp);
+      const headers: Record<string, string> = {};
+      onAfterHandleHandler({ set: { headers } });
+
+      expect(headers['sentry-trace']).toBe('abc123-def456-1');
+      expect(headers['baggage']).toBe('sentry-environment=test,sentry-trace_id=abc123');
+    });
+
+    it('does not set headers when trace data is empty', () => {
+      mockGetTraceData.mockReturnValueOnce({});
+      // @ts-expect-error - mock app
+      withElysia(mockApp);
+      const headers: Record<string, string> = {};
+      onAfterHandleHandler({ set: { headers } });
+
+      expect(headers['sentry-trace']).toBeUndefined();
+      expect(headers['baggage']).toBeUndefined();
+    });
   });
 
   describe('defaultShouldHandleError', () => {

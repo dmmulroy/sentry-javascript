@@ -3,6 +3,7 @@ import {
   captureException,
   getClient,
   getIsolationScope,
+  getTraceData,
   SEMANTIC_ATTRIBUTE_SENTRY_OP,
   SEMANTIC_ATTRIBUTE_SENTRY_ORIGIN,
   spanToJSON,
@@ -84,6 +85,16 @@ export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHan
         headers: Object.fromEntries(context.request.headers.entries()),
       },
     });
+  });
+
+  app.onAfterHandle({ as: 'global' }, context => {
+    const traceData = getTraceData();
+    if (traceData['sentry-trace']) {
+      context.set.headers['sentry-trace'] = traceData['sentry-trace'];
+    }
+    if (traceData.baggage) {
+      context.set.headers['baggage'] = traceData.baggage;
+    }
   });
 
   app.onError({ as: 'global' }, context => {
