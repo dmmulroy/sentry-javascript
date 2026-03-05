@@ -65,9 +65,21 @@ export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHan
   // https://elysiajs.com/plugins/opentelemetry
   app.use(opentelemetry());
 
-  // Enrich Elysia lifecycle spans with semantic op and origin.
-  getClient()?.on('spanEnd', span => {
+  const client = getClient();
+  const emptySpanIds = new Set<string>();
+
+  // Enrich Elysia lifecycle spans with semantic op and origin,
+  // and mark empty spans that Elysia produces as children of lifecycle spans.
+  client?.on('spanEnd', span => {
     const spanData = spanToJSON(span);
+
+    // Elysia produces empty spans (no name, no attributes) as children of lifecycle spans.
+    // Mark them here while they're still in their original empty state, before the
+    // OTel exporter decorates them with defaults like "<unknown>" and "manual" origin.
+    if (!spanData.description && (!spanData.data || Object.keys(spanData.data).length === 0)) {
+      emptySpanIds.add(spanData.span_id);
+      return;
+    }
 
     // Enrich Elysia lifecycle spans with semantic op and origin.
     // We mutate the attributes directly because the span has already ended
@@ -77,6 +89,15 @@ export function withElysia<T extends Elysia>(app: T, options?: Partial<ElysiaHan
       const attrs = spanData.data;
       attrs[SEMANTIC_ATTRIBUTE_SENTRY_OP] = op;
       attrs[SEMANTIC_ATTRIBUTE_SENTRY_ORIGIN] = ELYSIA_ORIGIN;
+    }
+  });
+
+  // Filter out the empty spans we marked above before sending the transaction,
+  // then clear the set to avoid unbounded memory growth.
+  client?.on('beforeSendEvent', event => {
+    if (event.type === 'transaction' && event.spans) {
+      event.spans = event.spans.filter(span => !emptySpanIds.has(span.span_id));
+      emptySpanIds.clear();
     }
   });
 
