@@ -47,11 +47,13 @@ describe.each([
     expect(layer).toBeDefined();
   });
 
+
   it('creates layer with all features enabled', () => {
     const layer = effectLayer({
       dsn: TEST_DSN,
       transport: getMockTransport(),
       enableLogs: true,
+      enableMetrics: true,
     });
 
     expect(layer).toBeDefined();
