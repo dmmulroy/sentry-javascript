@@ -80,7 +80,7 @@ test('Sends a transaction for an errored route', async ({ baseURL, request }) =>
   expect(transactionEvent.contexts?.trace?.status).toBe('internal_error');
 });
 
-test('Includes a manually started span', async ({ baseURL, request }) => {
+test('Includes manually started spans with parent-child relationship', async ({ baseURL, request }) => {
   const transactionEventPromise = waitForTransaction('bun-elysia', transactionEvent => {
     return (
       transactionEvent?.contexts?.trace?.op === 'http.server' &&
@@ -93,10 +93,21 @@ test('Includes a manually started span', async ({ baseURL, request }) => {
   const transactionEvent = await transactionEventPromise;
   const spans = transactionEvent.spans || [];
 
-  expect(spans).toContainEqual(
+  const testSpan = spans.find(span => span.description === 'test-span');
+  const childSpan = spans.find(span => span.description === 'child-span');
+
+  expect(testSpan).toEqual(
     expect.objectContaining({
       description: 'test-span',
       origin: 'manual',
+    }),
+  );
+
+  expect(childSpan).toEqual(
+    expect.objectContaining({
+      description: 'child-span',
+      origin: 'manual',
+      parent_span_id: testSpan?.span_id,
     }),
   );
 });
@@ -146,6 +157,34 @@ test('Creates lifecycle spans for route-specific middleware', async ({ baseURL, 
       description: 'BeforeHandle',
       op: 'middleware.elysia',
       origin: 'auto.http.otel.elysia',
+    }),
+  );
+});
+
+test('Captures request metadata for POST requests', async ({ baseURL, request }) => {
+  const transactionEventPromise = waitForTransaction('bun-elysia', transactionEvent => {
+    return (
+      transactionEvent?.contexts?.trace?.op === 'http.server' && transactionEvent?.transaction === 'POST /test-post'
+    );
+  });
+
+  const response = await request.post(`${baseURL}/test-post`, {
+    data: { foo: 'bar', other: 1 },
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const resBody = await response.json();
+
+  expect(resBody).toEqual({ status: 'ok', body: { foo: 'bar', other: 1 } });
+
+  const transactionEvent = await transactionEventPromise;
+
+  expect(transactionEvent.request).toEqual(
+    expect.objectContaining({
+      method: 'POST',
+      url: expect.stringContaining('/test-post'),
+      headers: expect.objectContaining({
+        'content-type': 'application/json',
+      }),
     }),
   );
 });

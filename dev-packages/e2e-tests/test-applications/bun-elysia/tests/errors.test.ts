@@ -28,6 +28,24 @@ test('Captures an error thrown in a route handler', async ({ baseURL, request })
   );
 });
 
+test('Error event includes request metadata', async ({ baseURL, request }) => {
+  const errorEventPromise = waitForError('bun-elysia', event => {
+    return !event.type && event.exception?.values?.[0]?.value === 'This is an exception with id 456';
+  });
+
+  await request.get(`${baseURL}/test-exception/456`);
+
+  const errorEvent = await errorEventPromise;
+
+  expect(errorEvent.request).toEqual(
+    expect.objectContaining({
+      method: 'GET',
+      url: expect.stringContaining('/test-exception/456'),
+      headers: expect.any(Object),
+    }),
+  );
+});
+
 test('Does not capture errors for 4xx responses', async ({ baseURL, request }) => {
   const transactionPromise = waitForTransaction('bun-elysia', transactionEvent => {
     return transactionEvent?.transaction === 'GET /test-4xx';

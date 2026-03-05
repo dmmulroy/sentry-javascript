@@ -6,6 +6,7 @@ Sentry.init({
   dsn: process.env.E2E_TEST_DSN,
   tunnel: `http://localhost:3031/`, // proxy server
   tracesSampleRate: 1,
+  tracePropagationTargets: ['http://localhost:3030', '/external-allowed'],
 });
 
 const app = Sentry.withElysia(new Elysia());
@@ -29,7 +30,9 @@ app.get('/test-exception/:id', ({ params }) => {
 
 // Route with a custom span
 app.get('/test-transaction', () => {
-  Sentry.startSpan({ name: 'test-span' }, () => undefined);
+  Sentry.startSpan({ name: 'test-span' }, () => {
+    Sentry.startSpan({ name: 'child-span' }, () => {});
+  });
   return { status: 'ok' };
 });
 
@@ -53,6 +56,60 @@ app.get('/test-4xx', ({ set }) => {
   return { error: 'Bad Request' };
 });
 
+// POST route that echoes body
+app.post('/test-post', ({ body }) => ({ status: 'ok', body }));
+
+// Route that returns inbound headers (for propagation tests)
+app.get('/test-inbound-headers/:id', ({ params, request }) => {
+  const headers = Object.fromEntries(request.headers.entries());
+  return { headers, id: params.id };
+});
+
+// Outgoing fetch propagation
+app.get('/test-outgoing-fetch/:id', async ({ params }) => {
+  const id = params.id;
+  const response = await fetch(`http://localhost:3030/test-inbound-headers/${id}`);
+  const data = await response.json();
+  return data;
+});
+
+// Outgoing fetch to external (allowed by tracePropagationTargets)
+app.get('/test-outgoing-fetch-external-allowed', async () => {
+  const response = await fetch(`http://localhost:3040/external-allowed`);
+  const data = await response.json();
+  return data;
+});
+
+// Outgoing fetch to external (disallowed by tracePropagationTargets)
+app.get('/test-outgoing-fetch-external-disallowed', async () => {
+  const response = await fetch(`http://localhost:3040/external-disallowed`);
+  const data = await response.json();
+  return data;
+});
+
+// Flush route for waiting on events
+app.get('/flush', async () => {
+  await Sentry.flush();
+  return { ok: true };
+});
+
 app.listen(3030, () => {
   console.log('Elysia app listening on port 3030');
+});
+
+// Second app for external propagation tests
+const app2 = new Elysia();
+
+app2.get('/external-allowed', ({ request }) => {
+  const headers = Object.fromEntries(request.headers.entries());
+  return { headers, route: '/external-allowed' };
+});
+
+app2.get('/external-disallowed', ({ request }) => {
+  const headers = Object.fromEntries(request.headers.entries());
+  return { headers, route: '/external-disallowed' };
+});
+
+app2.listen(3040, () => {
+  console.log('External app listening on port 3040');
 });
